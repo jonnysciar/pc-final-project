@@ -144,6 +144,7 @@ if(NOT PARTICLES_BUILD_CUDA STREQUAL "OFF")
         set(CMAKE_CUDA_EXTENSIONS OFF)
         set(CMAKE_EXE_LINKER_FLAGS "-L/usr/lib/gcc/x86_64-linux-gnu/14")
         set(CMAKE_SHARED_LINKER_FLAGS "-L/usr/lib/gcc/x86_64-linux-gnu/14")
+        set(CUDA_NVCC_FLAGS "-fmad=false")
 
         set(PARTICLES_CUDA_AVAILABLE ON)
     elseif(PARTICLES_BUILD_CUDA STREQUAL "ON" OR PARTICLES_STRICT_CUDA)
@@ -290,8 +291,8 @@ if(PARTICLES_CUDA_AVAILABLE)
 
     if(TARGET particles_cuda)
         set_target_properties(particles_cuda PROPERTIES
-            CUDA_SEPARABLE_COMPILATION OFF
-            #CUDA_RESOLVE_DEVICE_SYMBOLS ON
+            CUDA_SEPARABLE_COMPILATION ON
+            CUDA_RESOLVE_DEVICE_SYMBOLS ON
         )
 
         if(PARTICLES_FAST_MATH_CUDA)
@@ -299,6 +300,10 @@ if(PARTICLES_CUDA_AVAILABLE)
                 $<$<COMPILE_LANGUAGE:CUDA>:--use_fast_math>
             )
         endif()
+
+        target_compile_options(particles_cuda PRIVATE
+                ${CUDA_NVCC_FLAGS}
+        )
 
         target_compile_definitions(particles_cuda PRIVATE PARTICLES_CUDA=1)
     endif()

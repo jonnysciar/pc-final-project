@@ -98,6 +98,11 @@ outputEvery:
 #include <utility>
 #include <vector>
 
+// CUDA Headers
+#include <cuda_runtime.h>
+
+#define BLOCKSIZE 32
+
 
 // ============================================================
 // CONSTANTS: part of the numerical model. Do not change.
@@ -194,7 +199,7 @@ struct Grid {
 struct Particles {
     std::size_t n{};
 
-    // Structure-of-arrays layout. 
+    // Structure-of-arrays layout.
     // Friendly to SIMD, cache blocking, CUDA/OpenACC offload, and MPI packing.
     std::vector<double> w;
     std::vector<double> x;
@@ -212,6 +217,106 @@ struct Particles {
         y.resize(N);
         vx.assign(N, 0.0);
         vy.assign(N, 0.0);
+    }
+};
+
+struct GPUForce {
+    std::size_t n{};
+
+    double *fx = nullptr;
+    double *fy = nullptr;
+
+    GPUForce(const std::size_t n) : n(n) {
+        cudaMalloc(&this->fx, this->n * sizeof(double));
+        cudaMalloc(&this->fy, this->n * sizeof(double));
+
+        cudaMemset(fx, 0, n * sizeof(double));
+        cudaMemset(fy, 0, n * sizeof(double));
+
+        cudaDeviceSynchronize();
+    }
+    GPUForce(const double *fx, const double *fy, const std::size_t n) : n(n) {
+        cudaMalloc(&this->fx, this->n * sizeof(double));
+        cudaMalloc(&this->fy, this->n * sizeof(double));
+
+        cudaMemcpy(this->fx, fx, n * sizeof(double), cudaMemcpyHostToDevice);
+        cudaMemcpy(this->fy, fy, n * sizeof(double), cudaMemcpyHostToDevice);
+    }
+
+    void copy_from(double *fx, double *fy) const {
+        cudaMemcpy(this->fx, fx, n * sizeof(double), cudaMemcpyHostToDevice);
+        cudaMemcpy(this->fy, fy, n * sizeof(double), cudaMemcpyHostToDevice);
+    }
+
+    void copy_to(double *fx, double *fy, const std::size_t n) const {
+        cudaMemcpy(fx, this->fx, n * sizeof(double), cudaMemcpyDeviceToHost);
+        cudaMemcpy(fy, this->fy, n * sizeof(double), cudaMemcpyDeviceToHost);
+    }
+
+    void swap(GPUForce &other) {
+        double *tmp = fx;
+        fx = other.fx;
+        other.fx = tmp;
+
+        tmp = fy;
+        fy = other.fy;
+        other.fy = tmp;
+    }
+
+    void free() const {
+        cudaFree(fx);
+        cudaFree(fy);
+    }
+};
+
+struct GPUParticles {
+    std::size_t n{};
+
+    // Structure-of-arrays layout.
+    // Friendly to SIMD, cache blocking, CUDA/OpenACC offload, and MPI packing.
+    double* w = nullptr;
+    double* x = nullptr;
+    double* y = nullptr;
+    double* vx = nullptr;
+    double *vy = nullptr;
+
+
+    GPUParticles(const Particles &P) : n(P.n) {
+        cudaMalloc(&w, n * sizeof(double));
+        cudaMalloc(&x, n * sizeof(double));
+        cudaMalloc(&y, n * sizeof(double));
+        cudaMalloc(&vx, n * sizeof(double));
+        cudaMalloc(&vy, n * sizeof(double));
+
+        cudaMemcpy(w, P.w.data(), n * sizeof(double), cudaMemcpyHostToDevice);
+        cudaMemcpy(x, P.x.data(), n * sizeof(double), cudaMemcpyHostToDevice);
+        cudaMemcpy(y, P.y.data(), n * sizeof(double), cudaMemcpyHostToDevice);
+        cudaMemcpy(vx, P.vx.data(), n * sizeof(double), cudaMemcpyHostToDevice);
+        cudaMemcpy(vy, P.vy.data(), n * sizeof(double), cudaMemcpyHostToDevice);
+    }
+
+    void copy_to(Particles &P) const {
+        cudaMemcpy(P.w.data(), w, P.n * sizeof(double), cudaMemcpyDeviceToHost);
+        cudaMemcpy(P.x.data(), x, P.n * sizeof(double), cudaMemcpyDeviceToHost);
+        cudaMemcpy(P.y.data(), y, P.n * sizeof(double), cudaMemcpyDeviceToHost);
+        cudaMemcpy(P.vx.data(), vx, P.n * sizeof(double), cudaMemcpyDeviceToHost);
+        cudaMemcpy(P.vy.data(), vy, P.n * sizeof(double), cudaMemcpyDeviceToHost);
+    }
+
+    void copy_from(Particles &P) const {
+        cudaMemcpy(w, P.w.data(), n * sizeof(double), cudaMemcpyHostToDevice);
+        cudaMemcpy(x, P.x.data(), n * sizeof(double), cudaMemcpyHostToDevice);
+        cudaMemcpy(y, P.y.data(), n * sizeof(double), cudaMemcpyHostToDevice);
+        cudaMemcpy(vx, P.vx.data(), n * sizeof(double), cudaMemcpyHostToDevice);
+        cudaMemcpy(vy, P.vy.data(), n * sizeof(double), cudaMemcpyHostToDevice);
+    }
+
+    void free() const {
+        cudaFree(w);
+        cudaFree(x);
+        cudaFree(y);
+        cudaFree(vx);
+        cudaFree(vy);
     }
 };
 
@@ -517,6 +622,41 @@ void computeForces(const Particles& P, double* fx, double* fy) {
         fy[i] = fyi;
     }
 }
+__global__ void computeForcesGPU(const GPUParticles GP, const GPUForce F) {
+    const std::size_t N = GP.n;
+    const std::size_t i = threadIdx.x + blockIdx.x * blockDim.x;
+
+    const double* const x = GP.x;
+    const double* const y = GP.y;
+    const double* const w = GP.w;
+
+    if (i < N) {
+        const double xi = x[i];
+        const double yi = y[i];
+        const double wi = w[i];
+
+        double fxi = 0.0;
+        double fyi = 0.0;
+
+        for (std::size_t j = 0; j < N; ++j) {
+            if (i != j) {
+                const double dx = x[j] - xi;
+                const double dy = y[j] - yi;
+                const double r2 = dx * dx + dy * dy + eps2;
+                const double invr  = 1.0 / std::sqrt(r2);
+                const double invr2 = invr  * invr;
+                const double invr3 = invr2 * invr;
+                const double coeff = kForce * wi * w[j] * invr3;
+
+                fxi += coeff * dx;
+                fyi += coeff * dy;
+            }
+        }
+
+        F.fx[i] = fxi;
+        F.fy[i] = fyi;
+    }
+}
 
 
 // ============================================================
@@ -561,6 +701,80 @@ void integrateVV(
 
     fx.swap(fx_new);
     fy.swap(fy_new);
+}
+
+__global__ void integrateVVGPU1(GPUParticles GP, GPUForce F, double dt) {
+    const std::size_t N = GP.n;
+    const std::size_t i = threadIdx.x + blockIdx.x * blockDim.x;
+
+    if (i < N) {
+        assert(GP.w[i] > 0.0);
+
+        const double invm = 1.0 / GP.w[i];
+
+        GP.vx[i] += 0.5 * F.fx[i] * invm * dt;
+        GP.vy[i] += 0.5 * F.fy[i] * invm * dt;
+        GP.x[i]  += GP.vx[i] * dt;
+        GP.y[i]  += GP.vy[i] * dt;
+    }
+}
+
+__global__ void integrateVVGPU2(GPUParticles GP, GPUForce F, double dt) {
+    const std::size_t N = GP.n;
+    const std::size_t i = threadIdx.x + blockIdx.x * blockDim.x;
+
+    if (i < N) {
+        assert(GP.w[i] > 0.0);
+
+        const double invm = 1.0 / GP.w[i];
+
+        GP.vx[i] += 0.5 * F.fx[i] * invm * dt;
+        GP.vy[i] += 0.5 * F.fy[i] * invm * dt;
+    }
+}
+
+void integrateVV(GPUParticles GP, GPUForce F, GPUForce FN, double dt) {
+    const std::size_t N = GP.n;
+    dim3 bpg(ceil(static_cast<double>(N) / BLOCKSIZE));
+    dim3 tpb(BLOCKSIZE);
+    Particles P;
+    std::vector<double> fx(N), fy(N);
+    P.resize(N);
+
+    if (F.n != N || FN.n != N) {
+        throw std::runtime_error("integrateVV: force array size mismatch");
+    }
+
+    GP.copy_to(P);
+    F.copy_to(fx.data(), fy.data(), N);
+    for (std::size_t i = 0; i < N; ++i) {
+        assert(P.w[i] > 0.0);
+
+        const double invm = 1.0 / P.w[i];
+
+        P.vx[i] += 0.5 * fx[i] * invm * dt;
+        P.vy[i] += 0.5 * fy[i] * invm * dt;
+        P.x[i]  += P.vx[i] * dt;
+        P.y[i]  += P.vy[i] * dt;
+    }
+    GP.copy_from(P);
+
+    computeForcesGPU<<<bpg, tpb>>>(GP, FN);
+
+    GP.copy_to(P);
+    FN.copy_to(fx.data(), fy.data(), N);
+    for (std::size_t i = 0; i < N; ++i) {
+        assert(P.w[i] > 0.0);
+
+        const double invm = 1.0 / P.w[i];
+
+        P.vx[i] += 0.5 * fx[i] * invm * dt;
+        P.vy[i] += 0.5 * fy[i] * invm * dt;
+    }
+
+    GP.copy_from(P);
+
+    F.swap(FN);
 }
 
 
@@ -1137,16 +1351,18 @@ int main(int argc, char** argv) {
         // ----------------------------------------------------
         // 3. Allocate force arrays
         // ----------------------------------------------------
-        std::vector<double> fx(N, 0.0);
-        std::vector<double> fy(N, 0.0);
-        std::vector<double> fx_new(N, 0.0);
-        std::vector<double> fy_new(N, 0.0);
+
+        GPUParticles GP{P};
+        GPUForce F{N}, FN{N};
+        dim3 tpb(BLOCKSIZE);
+        dim3 bpg(ceil(static_cast<double>(N) / BLOCKSIZE));
 
         // ----------------------------------------------------
         // 4. Initial force computation
         // ----------------------------------------------------
         const auto initForceStart = std::chrono::steady_clock::now();
-        computeForces(P, fx.data(), fy.data());
+        computeForcesGPU<<<bpg, tpb>>>(GP, F);
+        cudaDeviceSynchronize();
         const auto initForceStop = std::chrono::steady_clock::now();
         const double initForceSeconds = std::chrono::duration<double>(initForceStop - initForceStart).count();
 
@@ -1185,6 +1401,9 @@ int main(int argc, char** argv) {
                 return;
             }
 
+            // TODO optimize
+            GP.copy_to(P);
+
             const auto screenStart = std::chrono::steady_clock::now();
             buildScreen(screen, P, wmin, wr);
             const auto screenStop = std::chrono::steady_clock::now();
@@ -1196,6 +1415,8 @@ int main(int argc, char** argv) {
             const auto h5Stop = std::chrono::steady_clock::now();
 
             hdf5WriteSeconds += std::chrono::duration<double>(h5Stop - h5Start).count();
+
+            GP.copy_from(P);
 
             hasLastWrittenStep = true;
             lastWrittenStep    = step;
@@ -1214,7 +1435,7 @@ int main(int argc, char** argv) {
             }
 
             const auto dynStart = std::chrono::steady_clock::now();
-            integrateVV(P, fx, fy, fx_new, fy_new, cfg.dt);
+            integrateVV(GP, F, FN, cfg.dt);
             const auto dynStop = std::chrono::steady_clock::now();
 
             pureDynamicsSeconds += std::chrono::duration<double>(dynStop - dynStart).count();
@@ -1231,6 +1452,7 @@ int main(int argc, char** argv) {
         // ----------------------------------------------------
         // 8. Validation
         // ----------------------------------------------------
+        GP.copy_to(P);
         const auto validationStart = std::chrono::steady_clock::now();
         const ValidationQuantities validation = computeValidationQuantities(P);
         const auto validationStop = std::chrono::steady_clock::now();
@@ -1264,6 +1486,10 @@ int main(int argc, char** argv) {
         }
 
         printValidationQuantities(validation);
+
+        GP.free();
+        F.free();
+        FN.free();
 
         return EXIT_SUCCESS;
     }
