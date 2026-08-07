@@ -230,8 +230,8 @@ struct GPUForce {
         cudaMalloc(&this->fx, this->n * sizeof(double));
         cudaMalloc(&this->fy, this->n * sizeof(double));
 
-        cudaMemset(fx, 0, n * sizeof(double));
-        cudaMemset(fy, 0, n * sizeof(double));
+        cudaMemset(fx, 0, this->n * sizeof(double));
+        cudaMemset(fy, 0, this->n * sizeof(double));
 
         cudaDeviceSynchronize();
     }
@@ -253,7 +253,7 @@ struct GPUForce {
         cudaMemcpy(fy, this->fy, n * sizeof(double), cudaMemcpyDeviceToHost);
     }
 
-    void swap(GPUForce &other) {
+    void swap(GPUForce &other) noexcept {
         double *tmp = fx;
         fx = other.fx;
         other.fx = tmp;
@@ -703,7 +703,7 @@ void integrateVV(
     fy.swap(fy_new);
 }
 
-__global__ void integrateVVGPU1(GPUParticles GP, GPUForce F, double dt) {
+__global__ void integrateVVGPU1(const GPUParticles GP, const GPUForce F, const double dt) {
     const std::size_t N = GP.n;
     const std::size_t i = threadIdx.x + blockIdx.x * blockDim.x;
 
@@ -719,7 +719,7 @@ __global__ void integrateVVGPU1(GPUParticles GP, GPUForce F, double dt) {
     }
 }
 
-__global__ void integrateVVGPU2(GPUParticles GP, GPUForce F, double dt) {
+__global__ void integrateVVGPU2(const GPUParticles GP, const GPUForce F, const double dt) {
     const std::size_t N = GP.n;
     const std::size_t i = threadIdx.x + blockIdx.x * blockDim.x;
 
@@ -733,46 +733,19 @@ __global__ void integrateVVGPU2(GPUParticles GP, GPUForce F, double dt) {
     }
 }
 
-void integrateVV(GPUParticles GP, GPUForce F, GPUForce FN, double dt) {
+void integrateVV(const GPUParticles &GP, GPUForce &F, GPUForce &FN, const double dt) {
     const std::size_t N = GP.n;
     dim3 bpg(ceil(static_cast<double>(N) / BLOCKSIZE));
     dim3 tpb(BLOCKSIZE);
-    Particles P;
-    std::vector<double> fx(N), fy(N);
-    P.resize(N);
 
     if (F.n != N || FN.n != N) {
         throw std::runtime_error("integrateVV: force array size mismatch");
     }
 
-    GP.copy_to(P);
-    F.copy_to(fx.data(), fy.data(), N);
-    for (std::size_t i = 0; i < N; ++i) {
-        assert(P.w[i] > 0.0);
-
-        const double invm = 1.0 / P.w[i];
-
-        P.vx[i] += 0.5 * fx[i] * invm * dt;
-        P.vy[i] += 0.5 * fy[i] * invm * dt;
-        P.x[i]  += P.vx[i] * dt;
-        P.y[i]  += P.vy[i] * dt;
-    }
-    GP.copy_from(P);
-
+    integrateVVGPU1<<<bpg, tpb>>>(GP, F, dt);
     computeForcesGPU<<<bpg, tpb>>>(GP, FN);
-
-    GP.copy_to(P);
-    FN.copy_to(fx.data(), fy.data(), N);
-    for (std::size_t i = 0; i < N; ++i) {
-        assert(P.w[i] > 0.0);
-
-        const double invm = 1.0 / P.w[i];
-
-        P.vx[i] += 0.5 * fx[i] * invm * dt;
-        P.vy[i] += 0.5 * fy[i] * invm * dt;
-    }
-
-    GP.copy_from(P);
+    integrateVVGPU2<<<bpg, tpb>>>(GP, FN, dt);
+    cudaDeviceSynchronize();
 
     F.swap(FN);
 }
@@ -1351,6 +1324,10 @@ int main(int argc, char** argv) {
         // ----------------------------------------------------
         // 3. Allocate force arrays
         // ----------------------------------------------------
+        std::vector fx(N, 0.0);
+        std::vector fy(N, 0.0);
+        std::vector fx_new(N, 0.0);
+        std::vector fy_new(N, 0.0);
 
         GPUParticles GP{P};
         GPUForce F{N}, FN{N};
@@ -1365,6 +1342,9 @@ int main(int argc, char** argv) {
         cudaDeviceSynchronize();
         const auto initForceStop = std::chrono::steady_clock::now();
         const double initForceSeconds = std::chrono::duration<double>(initForceStop - initForceStart).count();
+
+        GP.copy_to(P);
+        F.copy_to(fx.data(), fy.data(), N);
 
         // ----------------------------------------------------
         // 5. Weight range for screen output
@@ -1401,7 +1381,6 @@ int main(int argc, char** argv) {
                 return;
             }
 
-            // TODO optimize
             GP.copy_to(P);
 
             const auto screenStart = std::chrono::steady_clock::now();
@@ -1415,8 +1394,6 @@ int main(int argc, char** argv) {
             const auto h5Stop = std::chrono::steady_clock::now();
 
             hdf5WriteSeconds += std::chrono::duration<double>(h5Stop - h5Start).count();
-
-            GP.copy_from(P);
 
             hasLastWrittenStep = true;
             lastWrittenStep    = step;
@@ -1435,7 +1412,10 @@ int main(int argc, char** argv) {
             }
 
             const auto dynStart = std::chrono::steady_clock::now();
+
             integrateVV(GP, F, FN, cfg.dt);
+
+            //integrateVVGPU(P, fx, fy, fx_new, fy_new, cfg.dt);
             const auto dynStop = std::chrono::steady_clock::now();
 
             pureDynamicsSeconds += std::chrono::duration<double>(dynStop - dynStart).count();
@@ -1452,7 +1432,6 @@ int main(int argc, char** argv) {
         // ----------------------------------------------------
         // 8. Validation
         // ----------------------------------------------------
-        GP.copy_to(P);
         const auto validationStart = std::chrono::steady_clock::now();
         const ValidationQuantities validation = computeValidationQuantities(P);
         const auto validationStop = std::chrono::steady_clock::now();
