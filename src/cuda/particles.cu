@@ -100,6 +100,7 @@ outputEvery:
 
 // CUDA Headers
 #include <cuda_runtime.h>
+#include <device_functions.h>
 
 #define BLOCKSIZE 32
 
@@ -622,31 +623,68 @@ void computeForces(const Particles& P, double* fx, double* fy) {
         fy[i] = fyi;
     }
 }
-__global__ void computeForcesGPU(const GPUParticles GP, const GPUForce F) {
+__global__ void computeForcesGPU(const GPUParticles GP, const std::size_t i,
+                                 const double xi, const double yi, const double force_wi,
+                                 const GPUForce F) {
+    std::size_t j = threadIdx.x + blockIdx.x * blockDim.x;
     const std::size_t N = GP.n;
-    const std::size_t i = threadIdx.x + blockIdx.x * blockDim.x;
+    __shared__ double fxi;
+    __shared__ double fyi;
+
+    if (threadIdx.x == 0) {
+        fxi = 0.0;
+        fyi = 0.0;
+    }
 
     const double* const x = GP.x;
     const double* const y = GP.y;
     const double* const w = GP.w;
 
+    if (i < N && i != j) {
+        double dx = x[j] - xi;
+        double dy = y[j] - yi;
+        double r2 = dx * dx + dy * dy + eps2;
+        double invr  = 1.0 / std::sqrt(r2);
+        invr = invr * invr * invr;
+        double coeff = force_wi * w[j] * invr;
+
+        atomicAdd(&fxi, coeff * dx);
+        atomicAdd(&fyi, coeff * dy);
+    }
+
+    __syncthreads();
+    if (threadIdx.x == 0) {
+        atomicAdd(&F.fx[i], fxi);
+        atomicAdd(&F.fy[i], fyi);
+    }
+}
+__global__ void computeForcesGPU(const GPUParticles GP, const GPUForce F) {
+    const std::size_t N = GP.n;
+    const std::size_t i = threadIdx.x + blockIdx.x * blockDim.x;
+    dim3 bpg(ceil(static_cast<double>(N) / BLOCKSIZE));
+    dim3 tpb(BLOCKSIZE);
+
     if (i < N) {
-        const double xi = x[i];
-        const double yi = y[i];
-        const double wi = w[i];
+        const double xi = GP.x[i];
+        const double yi = GP.y[i];
+        const double force_wi = kForce * GP.w[i];
+
+        const double* const x = GP.x;
+        const double* const y = GP.y;
+        const double* const w = GP.w;
 
         double fxi = 0.0;
         double fyi = 0.0;
 
-        for (std::size_t j = 0; j < N; ++j) {
+        for (int j = 0; j < N; ++j) {
             if (i != j) {
-                const double dx = x[j] - xi;
-                const double dy = y[j] - yi;
-                const double r2 = dx * dx + dy * dy + eps2;
-                const double invr  = 1.0 / std::sqrt(r2);
-                const double invr2 = invr  * invr;
-                const double invr3 = invr2 * invr;
-                const double coeff = kForce * wi * w[j] * invr3;
+
+                double dx = x[j] - xi;
+                double dy = y[j] - yi;
+                double r2 = dx * dx + dy * dy + eps2;
+                double invr  = 1.0 / std::sqrt(r2);
+                invr = invr * invr * invr;
+                double coeff = force_wi * w[j] * invr;
 
                 fxi += coeff * dx;
                 fyi += coeff * dy;
@@ -745,9 +783,6 @@ void integrateVV(const GPUParticles &GP, GPUForce &F, GPUForce &FN, const double
     integrateVVGPU1<<<bpg, tpb>>>(GP, F, dt);
     computeForcesGPU<<<bpg, tpb>>>(GP, FN);
     integrateVVGPU2<<<bpg, tpb>>>(GP, FN, dt);
-    cudaDeviceSynchronize();
-
-    F.swap(FN);
 }
 
 
@@ -1339,12 +1374,8 @@ int main(int argc, char** argv) {
         // ----------------------------------------------------
         const auto initForceStart = std::chrono::steady_clock::now();
         computeForcesGPU<<<bpg, tpb>>>(GP, F);
-        cudaDeviceSynchronize();
         const auto initForceStop = std::chrono::steady_clock::now();
         const double initForceSeconds = std::chrono::duration<double>(initForceStop - initForceStart).count();
-
-        GP.copy_to(P);
-        F.copy_to(fx.data(), fy.data(), N);
 
         // ----------------------------------------------------
         // 5. Weight range for screen output
@@ -1413,7 +1444,12 @@ int main(int argc, char** argv) {
 
             const auto dynStart = std::chrono::steady_clock::now();
 
-            integrateVV(GP, F, FN, cfg.dt);
+            if (step % 2 == 0) {
+                integrateVV(GP, F, FN, cfg.dt);
+            } else {
+                integrateVV(GP, FN, F, cfg.dt);
+            }
+
 
             //integrateVVGPU(P, fx, fy, fx_new, fy_new, cfg.dt);
             const auto dynStop = std::chrono::steady_clock::now();
@@ -1424,6 +1460,8 @@ int main(int argc, char** argv) {
         if (h5) {
             writeOutputFrame(cfg.maxSteps);
             h5->close();
+        } else {
+            GP.copy_to(P);
         }
 
         const auto loopStop = std::chrono::steady_clock::now();
