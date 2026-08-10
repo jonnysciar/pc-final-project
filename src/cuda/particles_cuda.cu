@@ -21,7 +21,7 @@
 #include <cuda_runtime.h>
 #include <device_functions.h>
 
-#define BLOCKSIZE 32
+#define BLOCKSIZE 256
 
 // ============================================================
 // MANDELBROT FIELD GENERATION
@@ -143,8 +143,6 @@ Particles generateParticles(const Grid& g, const Grid& pg) {
 __global__ void computeForcesGPU(const GPUParticles GP, const GPUForce F) {
     const std::size_t N = GP.n;
     const std::size_t i = threadIdx.x + blockIdx.x * blockDim.x;
-    dim3 bpg(ceil(static_cast<double>(N) / BLOCKSIZE));
-    dim3 tpb(BLOCKSIZE);
 
     if (i < N) {
         const double xi = GP.x[i];
@@ -313,11 +311,6 @@ int main(int argc, char** argv) {
         // ----------------------------------------------------
         // 3. Allocate force arrays
         // ----------------------------------------------------
-        std::vector fx(N, 0.0);
-        std::vector fy(N, 0.0);
-        std::vector fx_new(N, 0.0);
-        std::vector fy_new(N, 0.0);
-
         GPUParticles GP{P};
         GPUForce F{N}, FN{N};
         dim3 tpb(BLOCKSIZE);
