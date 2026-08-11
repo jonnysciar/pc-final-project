@@ -19,7 +19,6 @@
 
 // CUDA Headers
 #include <cuda_runtime.h>
-#include <device_functions.h>
 
 #define BLOCKSIZE 256
 
@@ -316,13 +315,21 @@ int main(int argc, char** argv) {
         dim3 tpb(BLOCKSIZE);
         dim3 bpg(ceil(static_cast<double>(N) / BLOCKSIZE));
 
+        cudaEvent_t start, finish;
+        cudaEventCreate(&start);
+        cudaEventCreate(&finish);
+
         // ----------------------------------------------------
         // 4. Initial force computation
         // ----------------------------------------------------
-        const auto initForceStart = std::chrono::steady_clock::now();
+
+        cudaEventRecord(start);
         computeForcesGPU<<<bpg, tpb>>>(GP, F);
-        const auto initForceStop = std::chrono::steady_clock::now();
-        const double initForceSeconds = std::chrono::duration<double>(initForceStop - initForceStart).count();
+        cudaEventRecord(finish);
+        cudaEventSynchronize(finish);
+        float initForceSeconds;
+        cudaEventElapsedTime(&initForceSeconds, start, finish);
+        initForceSeconds = initForceSeconds / 1000.0;
 
         // ----------------------------------------------------
         // 5. Weight range for screen output
@@ -381,28 +388,35 @@ int main(int argc, char** argv) {
         // ----------------------------------------------------
         // 7. Simulation loop
         // ----------------------------------------------------
-        const auto loopStart = std::chrono::steady_clock::now();
-        double pureDynamicsSeconds = 0.0;
+        cudaEvent_t dyn_start, dyn_finish;
+        cudaEventCreate(&dyn_start);
+        cudaEventCreate(&dyn_finish);
 
+        double pureDynamicsSeconds = 0.0;
+        float dynSeconds;
+
+        cudaEventRecord(start);
         for (std::size_t step = 0; step < cfg.maxSteps; ++step) {
             if (h5 && shouldWriteStep(step, cfg.maxSteps, cfg.outputEvery)) {
                 writeOutputFrame(step);
             }
 
-            const auto dynStart = std::chrono::steady_clock::now();
-
+            cudaEventRecord(dyn_start);
             if (step % 2 == 0) {
                 integrateVV(GP, F, FN, cfg.dt);
             } else {
                 integrateVV(GP, FN, F, cfg.dt);
             }
+            cudaEventRecord(dyn_finish);
 
-
-            //integrateVVGPU(P, fx, fy, fx_new, fy_new, cfg.dt);
-            const auto dynStop = std::chrono::steady_clock::now();
-
-            pureDynamicsSeconds += std::chrono::duration<double>(dynStop - dynStart).count();
+            cudaEventSynchronize(dyn_finish);
+            cudaEventElapsedTime(&dynSeconds, dyn_start, dyn_finish);
+            pureDynamicsSeconds += dynSeconds;
         }
+        pureDynamicsSeconds = pureDynamicsSeconds / 1000.0;
+
+        cudaEventDestroy(dyn_start);
+        cudaEventDestroy(dyn_finish);
 
         if (h5) {
             writeOutputFrame(cfg.maxSteps);
@@ -411,8 +425,14 @@ int main(int argc, char** argv) {
             GP.copy_to(P);
         }
 
-        const auto loopStop = std::chrono::steady_clock::now();
-        const double loopWallSeconds = std::chrono::duration<double>(loopStop - loopStart).count();
+        cudaEventRecord(finish);
+        cudaEventSynchronize(finish);
+        float loopWallSeconds;
+        cudaEventElapsedTime(&loopWallSeconds, start, finish);
+        loopWallSeconds = loopWallSeconds / 1000.0;
+
+        cudaEventDestroy(start);
+        cudaEventDestroy(finish);
 
         // ----------------------------------------------------
         // 8. Validation
