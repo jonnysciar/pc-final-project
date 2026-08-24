@@ -1,0 +1,11 @@
+# TODO LIST
+- [x] Implement CUDA version
+- [ ] Profile CUDA version
+- [ ] Improve CUDA version
+- [ ] Implement OPENMP version
+- [ ] Profile OPENMP version
+- [ ] Improve OPENMP version
+- [ ] Implement CUDA+OPENMP version
+- [ ] Profile CUDA+OPENMP version
+- [ ] Collect statistics
+- [ ] Prepare presentation with graphs and data
