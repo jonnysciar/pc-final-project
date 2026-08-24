@@ -329,7 +329,7 @@ int main(int argc, char** argv) {
         cudaEventSynchronize(finish);
         float initForceSeconds;
         cudaEventElapsedTime(&initForceSeconds, start, finish);
-        initForceSeconds = initForceSeconds / 1000.0;
+        initForceSeconds /= 1000.0;
 
         // ----------------------------------------------------
         // 5. Weight range for screen output
@@ -413,7 +413,7 @@ int main(int argc, char** argv) {
             cudaEventElapsedTime(&dynSeconds, dyn_start, dyn_finish);
             pureDynamicsSeconds += dynSeconds;
         }
-        pureDynamicsSeconds = pureDynamicsSeconds / 1000.0;
+        pureDynamicsSeconds /= 1000.0;
 
         cudaEventDestroy(dyn_start);
         cudaEventDestroy(dyn_finish);
@@ -429,7 +429,7 @@ int main(int argc, char** argv) {
         cudaEventSynchronize(finish);
         float loopWallSeconds;
         cudaEventElapsedTime(&loopWallSeconds, start, finish);
-        loopWallSeconds = loopWallSeconds / 1000.0;
+        loopWallSeconds /= 1000.0;
 
         cudaEventDestroy(start);
         cudaEventDestroy(finish);
