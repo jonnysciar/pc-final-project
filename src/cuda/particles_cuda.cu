@@ -156,18 +156,15 @@ __global__ void computeForcesGPU(const GPUParticles GP, const GPUForce F) {
         double fyi = 0.0;
 
         for (int j = 0; j < N; ++j) {
-            if (i != j) {
+            double dx = x[j] - xi;
+            double dy = y[j] - yi;
+            double r2 = dx * dx + dy * dy + eps2;
+            double invr  = 1.0 / std::sqrt(r2);
+            invr = invr * invr * invr;
+            double coeff = force_wi * w[j] * invr;
 
-                double dx = x[j] - xi;
-                double dy = y[j] - yi;
-                double r2 = dx * dx + dy * dy + eps2;
-                double invr  = 1.0 / std::sqrt(r2);
-                invr = invr * invr * invr;
-                double coeff = force_wi * w[j] * invr;
-
-                fxi += coeff * dx;
-                fyi += coeff * dy;
-            }
+            fxi += coeff * dx;
+            fyi += coeff * dy;
         }
 
         F.fx[i] = fxi;
@@ -212,7 +209,7 @@ __global__ void integrateVVGPU2(const GPUParticles GP, const GPUForce F, const d
 
 void integrateVV(const GPUParticles &GP, GPUForce &F, GPUForce &FN, const double dt) {
     const std::size_t N = GP.n;
-    dim3 bpg(ceil(static_cast<double>(N) / BLOCKSIZE));
+    dim3 bpg((N + BLOCKSIZE - 1) / BLOCKSIZE);
     dim3 tpb(BLOCKSIZE);
 
     if (F.n != N || FN.n != N) {
@@ -312,8 +309,8 @@ int main(int argc, char** argv) {
         // ----------------------------------------------------
         GPUParticles GP{P};
         GPUForce F{N}, FN{N};
+        dim3 bpg((N + BLOCKSIZE - 1) / BLOCKSIZE);
         dim3 tpb(BLOCKSIZE);
-        dim3 bpg(ceil(static_cast<double>(N) / BLOCKSIZE));
 
         cudaEvent_t start, finish;
         cudaEventCreate(&start);
