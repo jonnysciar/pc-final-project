@@ -25,7 +25,7 @@ if(NOT PARTICLES_BUILD_CUDA STREQUAL "OFF")
         set(CMAKE_CUDA_RUNTIME_LIBRARY Shared)
 
         if(PARTICLES_FAST_MATH_CUDA)
-            set(CUDA_NVCC_FLAGS "${CUDA_NVCC_FLAGS} --use_fast_math")
+            set(CUDA_NVCC_FLAGS ${CUDA_NVCC_FLAGS} -use_fast_math)
         endif()
 
         set(PARTICLES_CUDA_AVAILABLE ON)

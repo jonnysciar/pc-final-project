@@ -140,35 +140,56 @@ Particles generateParticles(const Grid& g, const Grid& pg) {
 // ============================================================
 
 __global__ void computeForcesGPU(const GPUParticles GP, const GPUForce F) {
-    const std::size_t N = GP.n;
-    const std::size_t i = threadIdx.x + blockIdx.x * blockDim.x;
+    const int N = GP.n;
+    const int tid = threadIdx.x;
+    const int gid = tid + blockIdx.x * blockDim.x;
+    const int num_tiles = (N + BLOCKSIZE - 1) / BLOCKSIZE;
 
-    if (i < N) {
-        const double xi = GP.x[i];
-        const double yi = GP.y[i];
-        const double force_wi = kForce * GP.w[i];
+    double xi = 0.0;
+    double yi = 0.0;
+    double force_wi = 0.0;
 
-        const double* const x = GP.x;
-        const double* const y = GP.y;
-        const double* const w = GP.w;
+    double fxi = 0.0;
+    double fyi = 0.0;
 
-        double fxi = 0.0;
-        double fyi = 0.0;
+    __shared__ double s_x[BLOCKSIZE];
+    __shared__ double s_y[BLOCKSIZE];
+    __shared__ double s_w[BLOCKSIZE];
 
-        for (int j = 0; j < N; ++j) {
-            double dx = x[j] - xi;
-            double dy = y[j] - yi;
+    if (gid < N) {
+        xi = GP.x[gid];
+        yi = GP.y[gid];
+        force_wi = kForce * GP.w[gid];
+    }
+
+    for (int it = 0; it < num_tiles; it++) {
+        const int j = it * BLOCKSIZE + tid;
+        if (j < N) {
+            s_x[tid] = GP.x[j];
+            s_y[tid] = GP.y[j];
+            s_w[tid] = GP.w[j];
+        }
+
+        __syncthreads();
+
+        for (int k = 0; k < BLOCKSIZE && it * BLOCKSIZE + k < N; k++) {
+            double dx = s_x[k] - xi;
+            double dy = s_y[k] - yi;
             double r2 = dx * dx + dy * dy + eps2;
-            double invr  = 1.0 / std::sqrt(r2);
+            double invr = 1.0 / std::sqrt(r2);
             invr = invr * invr * invr;
-            double coeff = force_wi * w[j] * invr;
+            double coeff = force_wi * s_w[k] * invr;
 
             fxi += coeff * dx;
             fyi += coeff * dy;
         }
 
-        F.fx[i] = fxi;
-        F.fy[i] = fyi;
+        __syncthreads();
+    }
+
+    if (gid < N) {
+        F.fx[gid] = fxi;
+        F.fy[gid] = fyi;
     }
 }
 
