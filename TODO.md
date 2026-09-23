@@ -1,8 +1,8 @@
 # TODO LIST
 - [x] Implement CUDA version
 - [ ] Profile CUDA version
-- [ ] Improve CUDA version
-- [ ] Implement OPENMP version
+- [x] Improve CUDA version
+- [x] Implement OPENMP version
 - [ ] Profile OPENMP version
 - [ ] Improve OPENMP version
 - [ ] Implement CUDA+OPENMP version

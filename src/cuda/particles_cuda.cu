@@ -172,7 +172,10 @@ __global__ void computeForcesGPU(const GPUParticles GP, const GPUForce F) {
 
         __syncthreads();
 
-        for (int k = 0; k < BLOCKSIZE && it * BLOCKSIZE + k < N; k++) {
+        const int tile_start = it * BLOCKSIZE;
+        const int tile_size = min(BLOCKSIZE, N - tile_start);
+
+        for (int k = 0; k < tile_size; k++) {
             double dx = s_x[k] - xi;
             double dy = s_y[k] - yi;
             double r2 = dx * dx + dy * dy + eps2;
