@@ -27,5 +27,5 @@ cmake -B "$BUILD_DIR" \
 
 cmake --build "$BUILD_DIR"
 
-nsys profile --stats=true --trace=cuda,nvtx,osrt -o profile ./"$BUILD_DIR"/src/cuda/particles_cuda input/Particles.in none 0
-#ncu --set full --kernel-name computeForcesGPU --launch-count 1 ./"$BUILD_DIR"/src/cuda/particles_cuda input/Particles.in none 0
+#nsys profile --stats=true --trace=cuda,nvtx,osrt -o nsys-profile ./"$BUILD_DIR"/src/cuda/particles_cuda_fma input/Particles.in none 0
+ncu --set full --kernel-name computeForcesGPU --launch-count 1 -f -o ncu-profile ./"$BUILD_DIR"/src/cuda/particles_cuda_fma input/Particles.in none 0

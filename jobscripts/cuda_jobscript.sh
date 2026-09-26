@@ -27,4 +27,4 @@ cmake -B "$BUILD_DIR" \
 
 cmake --build "$BUILD_DIR"
 
-./"$BUILD_DIR"/src/cuda/particles_cuda input/Particles.in output/cuda.hd5 1000
+./"$BUILD_DIR"/src/cuda/particles_cuda_fma input/Particles.in output/cuda.hd5 1000
