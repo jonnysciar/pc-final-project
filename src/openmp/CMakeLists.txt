@@ -10,7 +10,11 @@ file(GLOB_RECURSE SRCS "${CMAKE_CURRENT_SOURCE_DIR}/*.cpp" "${CMAKE_CURRENT_SOUR
 add_executable(${TARGET} ${COMMON_HDRS} ${HDRS} ${COMMON_SRCS} ${SRCS})
 
 target_include_directories(${TARGET} PRIVATE ${COMMON_DIR})
-target_compile_features(${TARGET} PRIVATE cxx_std_17)
 particles_apply_common_settings(${TARGET})
 target_link_libraries(${TARGET} PRIVATE OpenMP::OpenMP_CXX)
 target_compile_definitions(${TARGET} PRIVATE PARTICLES_OPENMP=1)
+
+if(PARTICLES_NATIVE_ARCH AND NOT MSVC)
+    target_compile_options(${TARGET} PRIVATE
+            $<$<COMPILE_LANGUAGE:CXX>:-march=native>)
+endif()

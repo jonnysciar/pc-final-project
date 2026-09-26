@@ -105,6 +105,7 @@ void computeGeneratingField(Grid& g, std::size_t maxIter) {
     const double dx = (g.xe - g.xs) / static_cast<double>(g.nx - 1);
     const double dy = (g.ye - g.ys) / static_cast<double>(g.ny - 1);
 
+
     for (std::size_t j = 0; j < g.ny; ++j) {
         for (std::size_t i = 0; i < g.nx; ++i) {
             const double ca = g.xs + static_cast<double>(i) * dx;
