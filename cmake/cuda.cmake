@@ -21,11 +21,17 @@ if(NOT PARTICLES_BUILD_CUDA STREQUAL "OFF")
         set(CMAKE_CUDA_EXTENSIONS OFF)
         set(CMAKE_EXE_LINKER_FLAGS "-L/usr/lib/gcc/x86_64-linux-gnu/14")
         set(CMAKE_SHARED_LINKER_FLAGS "-L/usr/lib/gcc/x86_64-linux-gnu/14")
-        set(CUDA_NVCC_FLAGS -fmad=false -Xptxas -v)
+        set(CUDA_NVCC_FLAGS -Xptxas -v)
         set(CMAKE_CUDA_RUNTIME_LIBRARY Shared)
 
         if(PARTICLES_FAST_MATH_CUDA)
             set(CUDA_NVCC_FLAGS ${CUDA_NVCC_FLAGS} -use_fast_math)
+        endif()
+
+        if(PARTICLES_FMA_CUDA)
+            set(CUDA_NVCC_FLAGS ${CUDA_NVCC_FLAGS} -fmad=true)
+        else ()
+            set(CUDA_NVCC_FLAGS ${CUDA_NVCC_FLAGS} -fmad=false)
         endif()
 
         set(PARTICLES_CUDA_AVAILABLE ON)
