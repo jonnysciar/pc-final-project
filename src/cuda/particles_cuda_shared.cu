@@ -178,13 +178,13 @@ __global__ void computeForcesGPU(const GPUParticles GP, const GPUForce F) {
         for (int k = 0; k < tile_size; k++) {
             double dx = s_x[k] - xi;
             double dy = s_y[k] - yi;
-            double r2 = fma(dx, dx, fma( dy, dy, eps2));
+            double r2 = dx * dx + dy * dy + eps2;
             double invr = 1.0 / std::sqrt(r2);
             invr = invr * invr * invr;
             double coeff = force_wi * s_w[k] * invr;
 
-            fxi = fma(coeff, dx, fxi);
-            fyi = fma(coeff, dy, fyi);
+            fxi += coeff * dx;
+            fyi += coeff * dy;
         }
 
         __syncthreads();

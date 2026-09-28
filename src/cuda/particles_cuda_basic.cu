@@ -141,56 +141,28 @@ Particles generateParticles(const Grid& g, const Grid& pg) {
 
 __global__ void computeForcesGPU(const GPUParticles GP, const GPUForce F) {
     const int N = GP.n;
-    const int tid = threadIdx.x;
-    const int gid = tid + blockIdx.x * blockDim.x;
-    const int num_tiles = (N + BLOCKSIZE - 1) / BLOCKSIZE;
-
-    double xi = 0.0;
-    double yi = 0.0;
-    double force_wi = 0.0;
-
-    double fxi = 0.0;
-    double fyi = 0.0;
-
-    __shared__ double s_x[BLOCKSIZE];
-    __shared__ double s_y[BLOCKSIZE];
-    __shared__ double s_w[BLOCKSIZE];
+    const int gid = threadIdx.x + blockIdx.x * blockDim.x;
 
     if (gid < N) {
-        xi = GP.x[gid];
-        yi = GP.y[gid];
-        force_wi = kForce * GP.w[gid];
-    }
+        const double xi = GP.x[gid];
+        const double yi = GP.y[gid];
+        const double force_wi = kForce * GP.w[gid];
 
-    for (int it = 0; it < num_tiles; it++) {
-        const int j = it * BLOCKSIZE + tid;
-        if (j < N) {
-            s_x[tid] = GP.x[j];
-            s_y[tid] = GP.y[j];
-            s_w[tid] = GP.w[j];
-        }
+        double fyi = 0.0;
+        double fxi = 0.0;
 
-        __syncthreads();
-
-        const int tile_start = it * BLOCKSIZE;
-        const int tile_size = min(BLOCKSIZE, N - tile_start);
-
-        for (int k = 0; k < tile_size; k++) {
-            double dx = s_x[k] - xi;
-            double dy = s_y[k] - yi;
-            double r2 = fma(dx, dx, fma( dy, dy, eps2));
+        for (int i = 0; i < N; i++) {
+            double dx = GP.x[i] - xi;
+            double dy = GP.y[i] - yi;
+            double r2 = dx * dx + dy * dy + eps2;
             double invr = 1.0 / std::sqrt(r2);
             invr = invr * invr * invr;
-            double coeff = force_wi * s_w[k] * invr;
+            double coeff = force_wi * GP.w[i] * invr;
 
-            fxi = fma(coeff, dx, fxi);
-            fyi = fma(coeff, dy, fyi);
+            fxi += coeff * dx;
+            fyi += coeff * dy;
         }
 
-        __syncthreads();
-    }
-
-    if (gid < N) {
         F.fx[gid] = fxi;
         F.fy[gid] = fyi;
     }
@@ -201,48 +173,52 @@ __global__ void computeForcesGPU(const GPUParticles GP, const GPUForce F) {
 // VELOCITY-VERLET INTEGRATION
 // ============================================================
 
-__global__ void integrateVVGPU1(const GPUParticles GP, const GPUForce F, const double dt) {
-    const std::size_t N = GP.n;
-    const std::size_t i = threadIdx.x + blockIdx.x * blockDim.x;
-
-    if (i < N) {
-        assert(GP.w[i] > 0.0);
-
-        const double invm = 1.0 / GP.w[i];
-
-        GP.vx[i] += 0.5 * F.fx[i] * invm * dt;
-        GP.vy[i] += 0.5 * F.fy[i] * invm * dt;
-        GP.x[i]  += GP.vx[i] * dt;
-        GP.y[i]  += GP.vy[i] * dt;
-    }
-}
-
-__global__ void integrateVVGPU2(const GPUParticles GP, const GPUForce F, const double dt) {
-    const std::size_t N = GP.n;
-    const std::size_t i = threadIdx.x + blockIdx.x * blockDim.x;
-
-    if (i < N) {
-        assert(GP.w[i] > 0.0);
-
-        const double invm = 1.0 / GP.w[i];
-
-        GP.vx[i] += 0.5 * F.fx[i] * invm * dt;
-        GP.vy[i] += 0.5 * F.fy[i] * invm * dt;
-    }
-}
-
-void integrateVV(const GPUParticles &GP, GPUForce &F, GPUForce &FN, const double dt) {
-    const std::size_t N = GP.n;
+void integrateVV(
+    Particles& P,
+    std::vector<double>& fx,
+    std::vector<double>& fy,
+    std::vector<double>& fx_new,
+    std::vector<double>& fy_new,
+    GPUParticles GP,
+    GPUForce F,
+    double dt
+) {
+    const std::size_t N = P.n;
     dim3 bpg((N + BLOCKSIZE - 1) / BLOCKSIZE);
     dim3 tpb(BLOCKSIZE);
 
-    if (F.n != N || FN.n != N) {
+    if (fx.size() != N || fy.size() != N || fx_new.size() != N || fy_new.size() != N) {
         throw std::runtime_error("integrateVV: force array size mismatch");
     }
 
-    integrateVVGPU1<<<bpg, tpb>>>(GP, F, dt);
-    computeForcesGPU<<<bpg, tpb>>>(GP, FN);
-    integrateVVGPU2<<<bpg, tpb>>>(GP, FN, dt);
+    for (std::size_t i = 0; i < N; ++i) {
+        assert(P.w[i] > 0.0);
+
+        const double invm = 1.0 / P.w[i];
+
+        P.vx[i] += 0.5 * fx[i] * invm * dt;
+        P.vy[i] += 0.5 * fy[i] * invm * dt;
+        P.x[i]  += P.vx[i] * dt;
+        P.y[i]  += P.vy[i] * dt;
+    }
+
+    GP.copy_from(P);
+    F.copy_from(fx_new.data(), fy_new.data());
+    computeForcesGPU<<<bpg, tpb>>>(GP, F);
+    GP.copy_to(P);
+    F.copy_to(fx_new.data(), fy_new.data(), N);
+
+    for (std::size_t i = 0; i < N; ++i) {
+        assert(P.w[i] > 0.0);
+
+        const double invm = 1.0 / P.w[i];
+
+        P.vx[i] += 0.5 * fx_new[i] * invm * dt;
+        P.vy[i] += 0.5 * fy_new[i] * invm * dt;
+    }
+
+    fx.swap(fx_new);
+    fy.swap(fy_new);
 }
 
 // ============================================================
@@ -331,8 +307,13 @@ int main(int argc, char** argv) {
         // ----------------------------------------------------
         // 3. Allocate force arrays
         // ----------------------------------------------------
+        std::vector<double> fx(N, 0.0);
+        std::vector<double> fy(N, 0.0);
+        std::vector<double> fx_new(N, 0.0);
+        std::vector<double> fy_new(N, 0.0);
+
         GPUParticles GP{P};
-        GPUForce F{N}, FN{N};
+        GPUForce F{N};
         dim3 bpg((N + BLOCKSIZE - 1) / BLOCKSIZE);
         dim3 tpb(BLOCKSIZE);
 
@@ -346,6 +327,8 @@ int main(int argc, char** argv) {
 
         cudaEventRecord(start);
         computeForcesGPU<<<bpg, tpb>>>(GP, F);
+        GP.copy_to(P);
+        F.copy_to(fx.data(), fy.data(), N);
         cudaEventRecord(finish);
         cudaEventSynchronize(finish);
         float initForceSeconds;
@@ -387,8 +370,6 @@ int main(int argc, char** argv) {
                 return;
             }
 
-            GP.copy_to(P);
-
             const auto screenStart = std::chrono::steady_clock::now();
             buildScreen(screen, P, wmin, wr);
             const auto screenStop = std::chrono::steady_clock::now();
@@ -409,51 +390,28 @@ int main(int argc, char** argv) {
         // ----------------------------------------------------
         // 7. Simulation loop
         // ----------------------------------------------------
-        cudaEvent_t dyn_start, dyn_finish;
-        cudaEventCreate(&dyn_start);
-        cudaEventCreate(&dyn_finish);
-
+        const auto loopStart = std::chrono::steady_clock::now();
         double pureDynamicsSeconds = 0.0;
-        float dynSeconds;
 
-        cudaEventRecord(start);
         for (std::size_t step = 0; step < cfg.maxSteps; ++step) {
             if (h5 && shouldWriteStep(step, cfg.maxSteps, cfg.outputEvery)) {
                 writeOutputFrame(step);
             }
 
-            cudaEventRecord(dyn_start);
-            if (step % 2 == 0) {
-                integrateVV(GP, F, FN, cfg.dt);
-            } else {
-                integrateVV(GP, FN, F, cfg.dt);
-            }
-            cudaEventRecord(dyn_finish);
+            const auto dynStart = std::chrono::steady_clock::now();
+            integrateVV(P, fx, fy, fx_new, fy_new, GP, F, cfg.dt);
+            const auto dynStop = std::chrono::steady_clock::now();
 
-            cudaEventSynchronize(dyn_finish);
-            cudaEventElapsedTime(&dynSeconds, dyn_start, dyn_finish);
-            pureDynamicsSeconds += dynSeconds;
+            pureDynamicsSeconds += std::chrono::duration<double>(dynStop - dynStart).count();
         }
-        pureDynamicsSeconds /= 1000.0;
-
-        cudaEventDestroy(dyn_start);
-        cudaEventDestroy(dyn_finish);
 
         if (h5) {
             writeOutputFrame(cfg.maxSteps);
             h5->close();
-        } else {
-            GP.copy_to(P);
         }
 
-        cudaEventRecord(finish);
-        cudaEventSynchronize(finish);
-        float loopWallSeconds;
-        cudaEventElapsedTime(&loopWallSeconds, start, finish);
-        loopWallSeconds /= 1000.0;
-
-        cudaEventDestroy(start);
-        cudaEventDestroy(finish);
+        const auto loopStop = std::chrono::steady_clock::now();
+        const double loopWallSeconds = std::chrono::duration<double>(loopStop - loopStart).count();
 
         // ----------------------------------------------------
         // 8. Validation
@@ -494,7 +452,6 @@ int main(int argc, char** argv) {
 
         GP.free();
         F.free();
-        FN.free();
 
         return EXIT_SUCCESS;
     }

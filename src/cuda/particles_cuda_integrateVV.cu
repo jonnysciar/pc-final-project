@@ -138,59 +138,30 @@ Particles generateParticles(const Grid& g, const Grid& pg) {
 // data layout, blocking, MPI decomposition, GPU offload, exploit pair symmetry,
 // but force law and the inclusion of all pair interactions must be preserved.
 // ============================================================
-
 __global__ void computeForcesGPU(const GPUParticles GP, const GPUForce F) {
     const int N = GP.n;
-    const int tid = threadIdx.x;
-    const int gid = tid + blockIdx.x * blockDim.x;
-    const int num_tiles = (N + BLOCKSIZE - 1) / BLOCKSIZE;
-
-    double xi = 0.0;
-    double yi = 0.0;
-    double force_wi = 0.0;
-
-    double fxi = 0.0;
-    double fyi = 0.0;
-
-    __shared__ double s_x[BLOCKSIZE];
-    __shared__ double s_y[BLOCKSIZE];
-    __shared__ double s_w[BLOCKSIZE];
+    const int gid = threadIdx.x + blockIdx.x * blockDim.x;
 
     if (gid < N) {
-        xi = GP.x[gid];
-        yi = GP.y[gid];
-        force_wi = kForce * GP.w[gid];
-    }
+        const double xi = GP.x[gid];
+        const double yi = GP.y[gid];
+        const double force_wi = kForce * GP.w[gid];
 
-    for (int it = 0; it < num_tiles; it++) {
-        const int j = it * BLOCKSIZE + tid;
-        if (j < N) {
-            s_x[tid] = GP.x[j];
-            s_y[tid] = GP.y[j];
-            s_w[tid] = GP.w[j];
-        }
+        double fyi = 0.0;
+        double fxi = 0.0;
 
-        __syncthreads();
-
-        const int tile_start = it * BLOCKSIZE;
-        const int tile_size = min(BLOCKSIZE, N - tile_start);
-
-        for (int k = 0; k < tile_size; k++) {
-            double dx = s_x[k] - xi;
-            double dy = s_y[k] - yi;
-            double r2 = fma(dx, dx, fma( dy, dy, eps2));
+        for (int i = 0; i < N; i++) {
+            double dx = GP.x[i] - xi;
+            double dy = GP.y[i] - yi;
+            double r2 = dx * dx + dy * dy + eps2;
             double invr = 1.0 / std::sqrt(r2);
             invr = invr * invr * invr;
-            double coeff = force_wi * s_w[k] * invr;
+            double coeff = force_wi * GP.w[i] * invr;
 
-            fxi = fma(coeff, dx, fxi);
-            fyi = fma(coeff, dy, fyi);
+            fxi += coeff * dx;
+            fyi += coeff * dy;
         }
 
-        __syncthreads();
-    }
-
-    if (gid < N) {
         F.fx[gid] = fxi;
         F.fy[gid] = fyi;
     }
