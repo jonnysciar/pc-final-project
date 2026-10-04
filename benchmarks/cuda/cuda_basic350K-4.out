@@ -1,0 +1,35 @@
+Input file:                 input/Particles350K.in
+HDF5 compiled:              yes
+HDF5 output:                disabled
+Benchmark/no-output mode:   yes
+Generating grid:            13900 x 14700
+Screen grid:                13900 x 14700
+Max iterations:             3000
+Steps:                      200
+dt:                         0.001
+Output policy:              final frame only, if HDF5 is enabled
+Particles:                  382374
+Simulation completed successfully.
+Output frames:                 0  
+Mandelbrot wall time:          23.747361354999999 s
+Particle generation wall time: 0.75579351500000003 s
+Initial force wall time:       0.87524324655532837 s
+Pure dynamics time:            172.499891894 s
+Screen build time:             0 s
+HDF5 write time:               0 s
+Validation time:               223.061438415 s
+Loop wall time:                172.49992529400001 s
+Pure dynamics performance:  169.5183595730538 GInteractions/s
+Loop end-to-end performance: 169.5183267503543 GInteractions/s
+Final validation quantities:
+  sum_x:            2921697117.2775874
+  sum_y:            2045752723.0401766
+  sum_vx:           34.018770086851674
+  sum_vy:           13.338087487526842
+  weighted_sum_x:   87650487773325.297
+  weighted_sum_y:   61372233900107.008
+  momentum_x:       3.4719589166343212e-05
+  momentum_y:       -0.0003930923135158082
+  kinetic_energy:   4318720809372.6157
+  potential_like:   185370500396729.28
+  energy_like:      189689221206101.91

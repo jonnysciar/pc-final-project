@@ -1,0 +1,94 @@
+Loading gcc/12.2.0
+  Loading requirement: zlib-ng/2.1.6-jkgunjc zstd/1.5.6-uq5yyux binutils/2.42
+Loading cuda/12.2
+  Loading requirement: libiconv/1.17-nhc3mhm xz/5.4.6-xxxg42c
+    libxml2/2.10.3-zbbe7lm
+Loading cmake/3.27.9
+  Loading requirement: nghttp2/1.57.0-634bffh curl/8.7.1 gmake/4.4.1-phqmvks
+    ncurses/6.5-svfl57u
+Loading hdf5/1.14.3--gcc--12.2.0-spack0.22
+  Loading requirement: glibc/2.28--gcc--12.2.0-gi6mmti
+    gcc-runtime/12.2.0--gcc--12.2.0-dqfwf7y pkgconf/2.2.0
+Loading python/3.11.7
+  Loading requirement: bzip2/1.0.8-ib3znej libmd/1.0.4-2km2lxx
+    libbsd/0.12.1-oocs6an expat/2.6.2-p2t4wry readline/8.2-zeda6mx
+    gdbm/1.23-wiol7vk pigz/2.8-5bwzpml tar/1.34-jgektnv gettext/0.22.5-hsxgafg
+    libffi/3.4.6-4vs4jpp libxcrypt/4.4.35-7om46b5 sqlite/3.43.2-4kl5mnp
+    util-linux-uuid/2.38.1-5achpds
+-- 
+-- ParticlesSimulation configuration
+--   System:                   Linux
+--   Processor:                x86_64
+--   C++ compiler:             /leonardo/prod/spack/06/install/0.22/linux-rhel8-icelake/gcc-8.5.0/gcc-12.2.0-lkcazt4letxjj4s7nlhzryoyivevsatz/bin/g++
+--   Build type:               Release
+--   Serial target built:      ON
+--   HDF5 requested:           AUTO
+--   HDF5 available:           ON
+--   OpenMP requested:         OFF
+--   OpenMP available:         OFF
+--   OpenMP target built:      OFF
+--   CUDA requested:           OFF
+--   CUDA available:           OFF
+--   CUDA target built:        OFF
+--   Native host architecture: OFF
+--   CUDA architectures:       not set
+-- 
+-- Configuring done (0.1s)
+-- Generating done (0.0s)
+-- Build files have been written to: /leonardo/home/userexternal/jsciarra/pc-final-project/serial-build
+Change Dir: '/leonardo/home/userexternal/jsciarra/pc-final-project/serial-build'
+
+Run Build Command(s): /leonardo/prod/spack/06/install/0.22/linux-rhel8-icelake/gcc-8.5.0/cmake-3.27.9-pjgva3e6nro3ogp3fdhwlazy3e6euchj/bin/cmake -E env VERBOSE=1 /leonardo/prod/spack/06/install/0.22/linux-rhel8-icelake/gcc-8.5.0/gmake-4.4.1-phqmvks6ubh6jf5vhamdtzbmsgqlxsil/bin/gmake -f Makefile
+/leonardo/prod/spack/06/install/0.22/linux-rhel8-icelake/gcc-8.5.0/cmake-3.27.9-pjgva3e6nro3ogp3fdhwlazy3e6euchj/bin/cmake -S/leonardo/home/userexternal/jsciarra/pc-final-project -B/leonardo/home/userexternal/jsciarra/pc-final-project/serial-build --check-build-system CMakeFiles/Makefile.cmake 0
+/leonardo/prod/spack/06/install/0.22/linux-rhel8-icelake/gcc-8.5.0/cmake-3.27.9-pjgva3e6nro3ogp3fdhwlazy3e6euchj/bin/cmake -E cmake_progress_start /leonardo/home/userexternal/jsciarra/pc-final-project/serial-build/CMakeFiles /leonardo/home/userexternal/jsciarra/pc-final-project/serial-build//CMakeFiles/progress.marks
+/leonardo/prod/spack/06/install/0.22/linux-rhel8-icelake/gcc-8.5.0/gmake-4.4.1-phqmvks6ubh6jf5vhamdtzbmsgqlxsil/bin/gmake  -f CMakeFiles/Makefile2 all
+gmake[1]: Entering directory '/leonardo/home/userexternal/jsciarra/pc-final-project/serial-build'
+/leonardo/prod/spack/06/install/0.22/linux-rhel8-icelake/gcc-8.5.0/gmake-4.4.1-phqmvks6ubh6jf5vhamdtzbmsgqlxsil/bin/gmake  -f src/serial/CMakeFiles/particles_serial.dir/build.make src/serial/CMakeFiles/particles_serial.dir/depend
+gmake[2]: Entering directory '/leonardo/home/userexternal/jsciarra/pc-final-project/serial-build'
+cd /leonardo/home/userexternal/jsciarra/pc-final-project/serial-build && /leonardo/prod/spack/06/install/0.22/linux-rhel8-icelake/gcc-8.5.0/cmake-3.27.9-pjgva3e6nro3ogp3fdhwlazy3e6euchj/bin/cmake -E cmake_depends "Unix Makefiles" /leonardo/home/userexternal/jsciarra/pc-final-project /leonardo/home/userexternal/jsciarra/pc-final-project/src/serial /leonardo/home/userexternal/jsciarra/pc-final-project/serial-build /leonardo/home/userexternal/jsciarra/pc-final-project/serial-build/src/serial /leonardo/home/userexternal/jsciarra/pc-final-project/serial-build/src/serial/CMakeFiles/particles_serial.dir/DependInfo.cmake "--color="
+Dependencies file "src/serial/CMakeFiles/particles_serial.dir/particles.cpp.o.d" is newer than depends file "/leonardo/home/userexternal/jsciarra/pc-final-project/serial-build/src/serial/CMakeFiles/particles_serial.dir/compiler_depend.internal".
+Consolidate compiler generated dependencies of target particles_serial
+gmake[2]: Leaving directory '/leonardo/home/userexternal/jsciarra/pc-final-project/serial-build'
+/leonardo/prod/spack/06/install/0.22/linux-rhel8-icelake/gcc-8.5.0/gmake-4.4.1-phqmvks6ubh6jf5vhamdtzbmsgqlxsil/bin/gmake  -f src/serial/CMakeFiles/particles_serial.dir/build.make src/serial/CMakeFiles/particles_serial.dir/build
+gmake[2]: Entering directory '/leonardo/home/userexternal/jsciarra/pc-final-project/serial-build'
+gmake[2]: Nothing to be done for 'src/serial/CMakeFiles/particles_serial.dir/build'.
+gmake[2]: Leaving directory '/leonardo/home/userexternal/jsciarra/pc-final-project/serial-build'
+[100%] Built target particles_serial
+gmake[1]: Leaving directory '/leonardo/home/userexternal/jsciarra/pc-final-project/serial-build'
+/leonardo/prod/spack/06/install/0.22/linux-rhel8-icelake/gcc-8.5.0/cmake-3.27.9-pjgva3e6nro3ogp3fdhwlazy3e6euchj/bin/cmake -E cmake_progress_start /leonardo/home/userexternal/jsciarra/pc-final-project/serial-build/CMakeFiles 0
+
+Input file:                 input/Particles.in
+HDF5 compiled:              yes
+HDF5 output:                disabled
+Benchmark/no-output mode:   yes
+Generating grid:            3700 x 2400
+Screen grid:                3700 x 2400
+Max iterations:             3000
+Steps:                      200
+dt:                         0.001
+Output policy:              final frame only, if HDF5 is enabled
+Particles:                  16593
+Simulation completed successfully.
+Output frames:                 0  
+Mandelbrot wall time:          1.0217292899999999 s
+Particle generation wall time: 0.031483418999999999 s
+Initial force wall time:       0.97283178699999995 s
+Pure dynamics time:            197.28016747999985 s
+Screen build time:             0 s
+HDF5 write time:               0 s
+Validation time:               0.42684337300000003 s
+Loop wall time:                197.28017429100001 s
+Pure dynamics performance:  0.27910667302927028 GInteractions/s
+Loop end-to-end performance: 0.27910666339325085 GInteractions/s
+Final validation quantities:
+  sum_x:            33775289.79893098
+  sum_y:            14486378.010852419
+  sum_vx:           4.9558037477589973
+  sum_vy:           0.13968684891818184
+  weighted_sum_x:   1013251138749.1191
+  weighted_sum_y:   434588001283.86401
+  momentum_x:       4.7150878579316213e-07
+  momentum_y:       4.4856041085949983e-06
+  kinetic_energy:   300918267655.76636
+  potential_like:   1770760559103.0659
+  energy_like:      2071678826758.8323
