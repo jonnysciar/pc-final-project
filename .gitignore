@@ -1,3 +1,13 @@
 
-output/*
 .idea/
+.venv/
+*-build/
+
+cuda.err
+serial.err
+omp.err
+cuda.out
+serial.out
+omp.out
+
+output/*.hd5
