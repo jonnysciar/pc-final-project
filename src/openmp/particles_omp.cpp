@@ -219,32 +219,44 @@ void computeForces(const Particles& P, double* fx, double* fy) {
         throw std::runtime_error("computeForces: null output pointer");
     }
 
-    const double* const x = P.x.data();
-    const double* const y = P.y.data();
-    const double* const w = P.w.data();
+    const double* __restrict__ const x = P.x.data();
+    const double* __restrict__ const y = P.y.data();
+    const double* __restrict__ const w = P.w.data();
 
-#pragma omp parallel for collapse(1) shared(N,x,y,w)
+#pragma omp parallel for
     for (std::size_t i = 0; i < N; ++i) {
         const double xi = x[i];
         const double yi = y[i];
-        const double wi = w[i];
+        const double force_wi = kForce * w[i];
 
         double fxi = 0.0;
         double fyi = 0.0;
+#pragma omp simd reduction(+:fxi, fyi)
+        for (std::size_t j = 0; j < i; ++j) {
+            const double dx = x[j] - xi;
+            const double dy = y[j] - yi;
+            const double r2 = dx * dx + dy * dy + eps2;
+            const double invr = 1.0 / std::sqrt(r2);
+            const double invr2 = invr * invr;
+            const double invr3 = invr2 * invr;
+            const double coeff = force_wi * w[j] * invr3;
 
-        for (std::size_t j = 0; j < N; ++j) {
-            if (i != j) {
-                const double dx = x[j] - xi;
-                const double dy = y[j] - yi;
-                const double r2 = dx * dx + dy * dy + eps2;
-                const double invr = 1.0 / std::sqrt(r2);
-                const double invr2 = invr * invr;
-                const double invr3 = invr2 * invr;
-                const double coeff = kForce * wi * w[j] * invr3;
+            fxi += coeff * dx;
+            fyi += coeff * dy;
+        }
 
-                fxi += coeff * dx;
-                fyi += coeff * dy;
-            }
+#pragma omp simd reduction(+:fxi, fyi)
+        for (std::size_t j = i + 1; j < N; ++j) {
+            const double dx = x[j] - xi;
+            const double dy = y[j] - yi;
+            const double r2 = dx * dx + dy * dy + eps2;
+            const double invr = 1.0 / std::sqrt(r2);
+            const double invr2 = invr * invr;
+            const double invr3 = invr2 * invr;
+            const double coeff = force_wi * w[j] * invr3;
+
+            fxi += coeff * dx;
+            fyi += coeff * dy;
         }
 
         fx[i] = fxi;
