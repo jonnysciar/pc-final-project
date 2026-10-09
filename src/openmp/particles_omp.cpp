@@ -78,8 +78,6 @@ outputEvery:
 #include "constants.hpp"
 #include "util.hpp"
 
-#include <omp.h>
-
 #include <algorithm>
 #include <cassert>
 #include <chrono>
@@ -231,22 +229,8 @@ void computeForces(const Particles& P, double* fx, double* fy) {
 
         double fxi = 0.0;
         double fyi = 0.0;
-#pragma omp simd reduction(+:fxi, fyi)
-        for (std::size_t j = 0; j < i; ++j) {
-            const double dx = x[j] - xi;
-            const double dy = y[j] - yi;
-            const double r2 = dx * dx + dy * dy + eps2;
-            const double invr = 1.0 / std::sqrt(r2);
-            const double invr2 = invr * invr;
-            const double invr3 = invr2 * invr;
-            const double coeff = force_wi * w[j] * invr3;
-
-            fxi += coeff * dx;
-            fyi += coeff * dy;
-        }
-
-#pragma omp simd reduction(+:fxi, fyi)
-        for (std::size_t j = i + 1; j < N; ++j) {
+#pragma omp parallel for reduction(+:fxi, fyi)
+        for (std::size_t j = 0; j < N; ++j) {
             const double dx = x[j] - xi;
             const double dy = y[j] - yi;
             const double r2 = dx * dx + dy * dy + eps2;
