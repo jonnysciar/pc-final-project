@@ -78,6 +78,8 @@ outputEvery:
 #include "constants.hpp"
 #include "util.hpp"
 
+#include <omp.h>
+
 #include <algorithm>
 #include <cassert>
 #include <chrono>
@@ -387,10 +389,10 @@ int main(int argc, char** argv) {
         // ----------------------------------------------------
         // 4. Initial force computation
         // ----------------------------------------------------
-        const auto initForceStart = std::chrono::steady_clock::now();
+        const auto initForceStart = omp_get_wtime();
         computeForces(P, fx.data(), fy.data());
-        const auto initForceStop = std::chrono::steady_clock::now();
-        const double initForceSeconds = std::chrono::duration<double>(initForceStop - initForceStart).count();
+        const auto initForceStop = omp_get_wtime();
+        const double initForceSeconds = initForceStop - initForceStart;
 
         // ----------------------------------------------------
         // 5. Weight range for screen output
@@ -447,7 +449,7 @@ int main(int argc, char** argv) {
         // ----------------------------------------------------
         // 7. Simulation loop
         // ----------------------------------------------------
-        const auto loopStart = std::chrono::steady_clock::now();
+        const auto loopStart = omp_get_wtime();
         double pureDynamicsSeconds = 0.0;
 
         for (std::size_t step = 0; step < cfg.maxSteps; ++step) {
@@ -455,11 +457,11 @@ int main(int argc, char** argv) {
                 writeOutputFrame(step);
             }
 
-            const auto dynStart = std::chrono::steady_clock::now();
+            const auto dynStart = omp_get_wtime();
             integrateVV(P, fx, fy, fx_new, fy_new, cfg.dt);
-            const auto dynStop = std::chrono::steady_clock::now();
+            const auto dynStop = omp_get_wtime();
 
-            pureDynamicsSeconds += std::chrono::duration<double>(dynStop - dynStart).count();
+            pureDynamicsSeconds += dynStop - dynStart;
         }
 
         if (h5) {
@@ -467,8 +469,8 @@ int main(int argc, char** argv) {
             h5->close();
         }
 
-        const auto loopStop = std::chrono::steady_clock::now();
-        const double loopWallSeconds = std::chrono::duration<double>(loopStop - loopStart).count();
+        const auto loopStop = omp_get_wtime();
+        const double loopWallSeconds = loopStop - loopStart;
 
         // ----------------------------------------------------
         // 8. Validation
